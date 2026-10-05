@@ -72,3 +72,25 @@ langs:
   vn:
     vn: Tiếng Việt
     en: Vietnamese
+
+# --- TransLution fork: keep the fork's own files out of the site ----------------
+# Added 2026-10-05. The one TransLution edit to an upstream file -- keep it as this
+# single block at the end so an upstream sync conflicts on these lines at most.
+# GitHub Pages renders front-matter-less .md as pages and runs Liquid in them, so
+# without this the agent contract and reference/ would publish on the site.
+# Jekyll 3 (pinned by github-pages) REPLACES its default excludes with this list,
+# which is why Gemfile, vendor/ and the Nix files are repeated here.
+# See .claude/rules/site-config.md. Not yet exercised by a Jekyll build.
+exclude:
+  - reference/
+  - AGENTS.md
+  - CLAUDE.md
+  - CHANGELOG.md
+  - .claude/
+  - Gemfile
+  - Gemfile.lock
+  - vendor/
+  - node_modules/
+  - flake.nix
+  - flake.lock
+  - .envrc
