@@ -1,3 +1,43 @@
+# sqlstyle.guide (TransLution fork) -- the one ignore file for this repository.
+#
+# Read before adding a rule. An ignore rule never untracks a file, and git
+# still reports changes to tracked files it matches. What a rule DOES do is
+# hide NEW files under it: `git status` stops showing them and `git add`
+# needs -f. Check what a rule matches with
+#     git ls-files -i -c --exclude-standard        # must print nothing
+#
+# The upstream block at the bottom is Simon Holywell's, unchanged. The TransLution
+# blocks sit above it so an upstream sync touches only the lines below the marker.
+
+# --- build output -------------------------------------------------------------
+# Build output for all projects
+# Estate standard, as in TransLutionServices. This repository has no .NET
+# projects today (0 tracked files under bin/ or obj/), so the rule hides nothing.
+[Bb]in/
+[Oo]bj/
+
+# --- editor and IDE state -------------------------------------------------------
+.vs/
+.vscode/
+*.suo
+*.user
+Desktop.ini
+
+# --- tool output ------------------------------------------------------------------
+# Jekyll's own output (_site, .jekyll-metadata) is ignored in the upstream block.
+# Ruby gems installed locally with `bundle install --path vendor/bundle`:
+vendor/
+.bundle/
+# direnv's cache for the Nix flake (.envrc is tracked; its state is not):
+.direnv/
+
+# --- reference/ ---------------------------------------------------------------------
+# Extracted data must never be committed. This repository holds no customer data
+# and nothing extracts any today; the rule is the estate standard, kept so it is
+# already in place if that changes.
+reference/_data/modules/
+
+# ===== upstream (treffynnon/sqlstyle.guide) -- do not edit below this line =====
 nbproject
 .ruby-version
 *.orig

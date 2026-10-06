@@ -1,0 +1,125 @@
+#!/bin/sh
+#
+# Keep reference/ honest at commit time.
+#
+# What this hook can and cannot do, stated plainly, because a hook that
+# overpromises gets disabled within a week:
+#
+#   IT CAN regenerate navigator.html. That file is generated from the
+#          markdown beside it, so "I edited a page and forgot to rebuild"
+#          is a mechanical error and this removes it.
+#
+#   IT CAN tell you which reference pages cite a source file you are about
+#          to change, so you find out now rather than when someone trusts a
+#          stale line number.
+#
+#   IT CANNOT write the prose. Whether a change to sqlstyle.guide.md means
+#          the translations page is now wrong is a judgement, and a hook
+#          that guessed would be worse than one that asks.
+#
+# It does not block. It exits non-zero only if the reference is internally
+# broken -- an anchor pointing past the end of a file, a script that
+# hard-codes someone's home directory. Those are defects, not opinions.
+#
+# Install with:  reference/_build/Install-Hooks.ps1
+# Skip once:     git commit --no-verify
+# Turn off:      git config translution.referencehook false
+
+set -u
+
+[ "$(git config --get translution.referencehook)" = "false" ] && exit 0
+
+REPO=$(git rev-parse --show-toplevel)
+cd "$REPO" || exit 0
+[ -d reference ] || exit 0
+
+STAGED=$(git diff --cached --name-only --diff-filter=ACMR)
+[ -z "$STAGED" ] && exit 0
+
+YELLOW=''; RESET=''
+if [ -t 2 ]; then YELLOW=$(printf '\033[33m'); RESET=$(printf '\033[0m'); fi
+note() { printf '%s\n' "$*" >&2; }
+
+# --- 1. reference markdown changed -> rebuild the navigator, mechanically ----
+if printf '%s\n' "$STAGED" | grep -q '^reference/.*\.md$'; then
+    if command -v powershell >/dev/null 2>&1; then
+        note "${YELLOW}reference:${RESET} markdown changed, regenerating navigator.html"
+        if powershell -NoProfile -ExecutionPolicy Bypass \
+             -File "reference/_build/publish.ps1" >/dev/null 2>&1; then
+            git add reference/navigator.html
+        else
+            note "  publish.ps1 failed -- navigator.html NOT regenerated. Commit continues;"
+            note "  run reference/_build/publish.ps1 yourself and amend."
+        fi
+    else
+        note "${YELLOW}reference:${RESET} markdown changed but powershell is not on PATH;"
+        note "  navigator.html is now stale. Run reference/_build/publish.ps1."
+    fi
+fi
+
+# --- 2. a documented source file changed -> name the pages that cite it ------
+# Basename matching on purpose: the reference cites files as `sqlstyle.guide.md:147`,
+# not by repository-relative path. The extension list is per-repository: this is a
+# Jekyll site, so .md, .yml and .html lead it. Widen it, never narrow it.
+CITED=""
+for f in $STAGED; do
+    case "$f" in
+        reference/*) continue ;;
+        *.md|*.yml|*.html|*.css|*.js|*.nix|*.cs|*.xaml|*.vb|*.xml|*.sql|*.ps1|*.py) ;;
+        *) continue ;;
+    esac
+    base=$(basename "$f")
+    pages=$(grep -rl "$base:" reference --include='*.md' 2>/dev/null | sort -u)
+    [ -n "$pages" ] && CITED="$CITED$base\n$(printf '%s' "$pages" | sed 's/^/    /')\n"
+done
+
+if [ -n "$CITED" ]; then
+    note ""
+    note "${YELLOW}reference:${RESET} this commit changes files the reference cites by line number."
+    note "Check whether these pages are still true -- the hook cannot:"
+    note ""
+    printf "$CITED" | sed 's/^/  /' >&2
+    note "  Line numbers shift on any edit above the cited line."
+fi
+
+# --- 3. a commit with no changelog entry -> say so, once, and move on -------
+# The rule is one entry per commit, newest first, with the date, the time, who,
+# the Jira keys and -- the part that matters -- why. This hook checks only that
+# the file was touched. It cannot check that the entry is any good, and a hook
+# that refused on a judgement gets turned off within a week.
+#
+# Reference-only commits still need one: "why" is exactly what a documentation
+# change is made of.
+if [ -f CHANGELOG.md ]; then
+    if ! printf '%s
+' "$STAGED" | grep -q '^CHANGELOG\.md$'; then
+        note ""
+        note "${YELLOW}changelog:${RESET} nothing staged in CHANGELOG.md for this commit."
+        note "  One entry, newest at the top: date and time, who, the Jira keys, and why."
+        note "  git log gives the first three for free -- the entry exists for the fourth."
+    fi
+fi
+
+# --- 4. hard checks: only things that are defects, never opinions ------------
+NEED_VERIFY=0
+printf '%s\n' "$STAGED" | grep -q '^reference/' && NEED_VERIFY=1
+[ -n "$CITED" ] && NEED_VERIFY=1
+
+if [ "$NEED_VERIFY" = "1" ] && command -v powershell >/dev/null 2>&1; then
+    if [ -f reference/_harness/Verify-Reference.ps1 ]; then
+        OUT=$(powershell -NoProfile -ExecutionPolicy Bypass \
+                -File "reference/_harness/Verify-Reference.ps1" -Quiet 2>&1)
+        if [ $? -ne 0 ]; then
+            note ""
+            note "reference: Verify-Reference.ps1 FAILED -- commit refused."
+            printf '%s\n' "$OUT" >&2
+            note ""
+            note "These are defects, not style: an anchor past the end of a file, or a"
+            note "script hard-coding one machine's paths. Fix, or --no-verify if you"
+            note "are deliberately committing work in progress."
+            exit 1
+        fi
+    fi
+fi
+
+exit 0
